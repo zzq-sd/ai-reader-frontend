@@ -1,0 +1,251 @@
+// AI阅读器 - 全局样式
+// 导入变量和混合文件（使用现代@use语法）
+@use './variables.scss';
+@use './mixins.scss';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+// 全局重置和基础样式 - 不覆盖主题变量
+* {
+  box-sizing: border-box;
+}
+
+// FontAwesome图标修复 - 强制加载和回退
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  src: url('~@fortawesome/fontawesome-free/webfonts/fa-solid-900.woff2') format('woff2'),
+       url('~@fortawesome/fontawesome-free/webfonts/fa-solid-900.woff') format('woff');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  src: url('~@fortawesome/fontawesome-free/webfonts/fa-regular-400.woff2') format('woff2'),
+       url('~@fortawesome/fontawesome-free/webfonts/fa-regular-400.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Font Awesome 6 Brands';
+  src: url('~@fortawesome/fontawesome-free/webfonts/fa-brands-400.woff2') format('woff2'),
+       url('~@fortawesome/fontawesome-free/webfonts/fa-brands-400.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+// FontAwesome基础类 - 确保正确显示
+.fa, .fas, .far, .fal, .fat, .fab {
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  line-height: 1;
+  display: inline-block;
+  font-weight: normal;
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.fa:before, .fas:before, .far:before, .fal:before, .fat:before, .fab:before {
+  font-weight: inherit;
+}
+
+.fas {
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+}
+
+.far {
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 400;
+}
+
+.fab {
+  font-family: 'Font Awesome 6 Brands';
+  font-weight: 400;
+}
+
+// 图标回退处理 - 当FontAwesome未加载时显示Unicode
+.fa-home:not(.fa):before,
+.fa-home:not(.fas):before,
+.fa-home:not(.far):before { content: '🏠'; }
+
+.fa-user:not(.fa):before,
+.fa-user:not(.fas):before,
+.fa-user:not(.far):before { content: '👤'; }
+
+.fa-cog:not(.fa):before,
+.fa-cog:not(.fas):before,
+.fa-cog:not(.far):before { content: '⚙️'; }
+
+.fa-brain:not(.fa):before,
+.fa-brain:not(.fas):before,
+.fa-brain:not(.far):before { content: '🧠'; }
+
+.fa-rss:not(.fa):before,
+.fa-rss:not(.fas):before,
+.fa-rss:not(.far):before { content: '📡'; }
+
+.fa-newspaper:not(.fa):before,
+.fa-newspaper:not(.fas):before,
+.fa-newspaper:not(.far):before { content: '📰'; }
+
+.fa-bookmark:not(.fa):before,
+.fa-bookmark:not(.fas):before,
+.fa-bookmark:not(.far):before { content: '🔖'; }
+
+.fa-sticky-note:not(.fa):before,
+.fa-sticky-note:not(.fas):before,
+.fa-sticky-note:not(.far):before { content: '📝'; }
+
+.fa-search:not(.fa):before,
+.fa-search:not(.fas):before,
+.fa-search:not(.far):before { content: '🔍'; }
+
+.fa-bell:not(.fa):before,
+.fa-bell:not(.fas):before,
+.fa-bell:not(.far):before { content: '🔔'; }
+
+// 滚动条样式 - 与主题保持一致
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-secondary);
+  border-radius: 3px;
+  transition: background-color var(--transition-speed-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-disabled);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--color-bg-secondary);
+}
+
+// Firefox 滚动条样式
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-secondary) var(--color-bg-secondary);
+}
+
+// 焦点样式
+:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+// 选择文本样式
+::selection {
+  background-color: var(--color-accent-primary);
+  color: white;
+}
+
+// 全局样式重置 - 使用原有变量
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+#app {
+  height: 100vh;
+  width: 100vw;
+}
+
+// 全局spacing类
+@for $i from 1 through 20 {
+  .spacing-#{$i} {
+    --spacing: calc(var(--spacing-unit) * #{$i});
+  }
+}
+
+// 通用动画类
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-speed-normal);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-fade-enter-active {
+  transition: all var(--transition-speed-normal);
+}
+
+.slide-fade-leave-active {
+  transition: all var(--transition-speed-fast);
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(-20px);
+  opacity: 0;
+}
+
+// 页面加载动画
+@keyframes pageFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-fade-in-up {
+  animation: pageFadeInUp 0.4s ease-out;
+}
+
+// 悬浮效果
+.hover-lift {
+  transition: transform var(--transition-speed-fast);
+  
+  &:hover {
+    transform: translateY(-1px);
+  }
+}
+
+// 毛玻璃效果
+.frosted-glass {
+  background-color: var(--color-bg-frosted);
+  backdrop-filter: blur(var(--backdrop-blur-intensity)) saturate(130%);
+  border: 1px solid var(--frosted-border-color);
+}
+
+// 文本省略
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 无选择
+.no-select {
+  user-select: none;
+} 

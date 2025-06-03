@@ -1,0 +1,90 @@
+// AI阅读器 - 全局CSS变量 (按原型设计一比一复刻)
+
+:root {
+  // 背景色系统 - 严格按照原型定义
+  --color-bg-primary: #0D0D0F; 
+  --color-bg-secondary: #131417; 
+  --color-bg-tertiary: #1A1B1F; 
+  --color-bg-hover: rgba(255, 255, 255, 0.06); 
+  --color-bg-active: rgba(255, 255, 255, 0.08); 
+  
+  // 文字色系统
+  --color-text-primary: #E1E1E6; 
+  --color-text-secondary: #A8A8B3; 
+  --color-text-disabled: #50505A; 
+  
+  // 主题色系统
+  --color-accent-primary: #7B61FF; 
+  --color-accent-primary-hover: #6A52E0;
+  --color-accent-secondary: #3B82F6;
+  --color-danger: #EF4444;
+  
+  // RGB 值（用于透明度）
+  --color-accent-primary-rgb: 123, 97, 255;
+  --color-bg-secondary-rgb: 19, 20, 23;
+  --color-bg-tertiary-rgb: 26, 27, 31;
+  --color-border-primary-rgb: 37, 38, 43;
+  
+  // 边框色系统
+  --color-border-primary: #25262B; 
+  --color-border-secondary: #36373D; 
+  
+  // 圆角系统
+  --border-radius-s: 4px;
+  --border-radius-m: 6px;
+  --border-radius-l: 8px; 
+  --border-radius-xl: 12px;
+  
+  // 间距系统
+  --spacing-unit: 4px;
+  
+  // 动画系统
+  --transition-speed-fast: 0.15s ease-out;
+  --transition-speed-normal: 0.2s ease-out;
+  --transition-speed-slow: 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  --transition-speed-popover: 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  
+  // 阴影系统
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.1);
+  --shadow-s: 0 2px 4px rgba(0,0,0,0.15);
+  --shadow-m: 0 4px 12px rgba(0,0,0,0.2);
+  --shadow-l: 0 8px 25px rgba(0,0,0,0.35);
+  
+  // 毛玻璃效果系统
+  --color-bg-frosted: rgba(30, 32, 37, 0.75);
+  --backdrop-blur-intensity: 10px; 
+  --frosted-border-color: rgba(255, 255, 255, 0.07);
+  
+  // 布局系统
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 60px;
+  --header-height: 48px;
+  
+  // 侧边栏样式
+  --sidebar-bg: var(--color-bg-secondary);
+  --border-color: var(--color-border-primary);
+  --primary-color: var(--color-accent-primary);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  
+  // 动画变量
+  --transition-duration: var(--transition-speed-normal);
+  --transition-timing: ease-out;
+  
+  // 滚动条样式
+  --scrollbar-thumb: var(--color-border-secondary);
+  --scrollbar-thumb-hover: var(--color-text-disabled);
+  
+  // 悬浮背景
+  --hover-bg: var(--color-bg-hover);
+}
+
+// SCSS变量 (用于计算和函数)
+$spacing-unit: 4px;
+$breakpoint-mobile: 768px;
+$breakpoint-desktop: 769px;
+
+// 间距计算函数
+@function spacing($multiplier) {
+  @return calc(var(--spacing-unit) * #{$multiplier});
+} 
