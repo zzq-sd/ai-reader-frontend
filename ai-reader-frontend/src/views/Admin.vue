@@ -82,12 +82,18 @@
                   v-model="userSearchQuery" 
                   type="text" 
                   placeholder="搜索用户..."
+                  @input="loadUsers(userSearchQuery)"
                 />
               </div>
             </div>
             
             <div class="data-table">
-              <table>
+              <div class="loading-indicator" v-if="isLoadingUsers">
+                <AppIcon icon="fas fa-spinner fa-spin" :size="ICON_SIZES.LG" />
+                <span>加载中...</span>
+              </div>
+              
+              <table v-else>
                 <thead>
                   <tr>
                     <th>用户名</th>
@@ -95,6 +101,7 @@
                     <th>角色</th>
                     <th>状态</th>
                     <th>注册时间</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -117,9 +124,27 @@
                       </span>
                     </td>
                     <td>{{ formatDate(user.createdAt) }}</td>
+                    <td>
+                      <button 
+                        class="status-toggle-btn" 
+                        @click="updateUserStatus(user.id, !user.enabled)"
+                        :title="user.enabled ? '禁用用户' : '启用用户'"
+                      >
+                        <AppIcon 
+                          :icon="user.enabled ? 'fas fa-ban' : 'fas fa-check'" 
+                          :size="ICON_SIZES.SM" 
+                        />
+                        {{ user.enabled ? '禁用' : '启用' }}
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
+              
+              <div class="empty-state" v-if="!isLoadingUsers && filteredUsers.length === 0">
+                <AppIcon icon="fas fa-users-slash" :size="ICON_SIZES.LG" />
+                <p>没有找到匹配的用户</p>
+              </div>
             </div>
           </div>
 
@@ -127,10 +152,23 @@
           <div v-if="activeTab === 'rss'" class="tab-panel">
             <div class="panel-header">
               <h3>RSS源监控</h3>
+              <button 
+                class="refresh-btn" 
+                @click="loadRssSources"
+                :disabled="isLoadingRss"
+              >
+                <AppIcon :icon="isLoadingRss ? 'fas fa-spinner fa-spin' : 'fas fa-sync'" :size="ICON_SIZES.SM" />
+                {{ isLoadingRss ? '刷新中...' : '刷新数据' }}
+              </button>
             </div>
             
             <div class="data-table">
-              <table>
+              <div class="loading-indicator" v-if="isLoadingRss">
+                <AppIcon icon="fas fa-spinner fa-spin" :size="ICON_SIZES.LG" />
+                <span>加载中...</span>
+              </div>
+              
+              <table v-else>
                 <thead>
                   <tr>
                     <th>RSS源</th>
@@ -140,7 +178,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="rss in mockRssData" :key="rss.id">
+                  <tr v-for="rss in rssSources" :key="rss.id">
                     <td>
                       <div class="rss-info">
                         <AppIcon icon="fas fa-rss" :size="ICON_SIZES.SM" class="rss-icon" />
@@ -154,12 +192,20 @@
                       <span class="status-badge" :class="{ active: rss.active, inactive: !rss.active }">
                         {{ rss.active ? '正常' : '异常' }}
                       </span>
+                      <div class="error-message" v-if="!rss.active && rss.errorMessage">
+                        {{ rss.errorMessage }}
+                      </div>
                     </td>
                     <td>{{ rss.articleCount }}</td>
                     <td>{{ formatRelativeTime(rss.lastUpdate) }}</td>
                   </tr>
                 </tbody>
               </table>
+              
+              <div class="empty-state" v-if="!isLoadingRss && rssSources.length === 0">
+                <AppIcon icon="fas fa-rss-square" :size="ICON_SIZES.LG" />
+                <p>没有RSS源数据</p>
+              </div>
             </div>
           </div>
 
@@ -167,150 +213,120 @@
           <div v-if="activeTab === 'ai-config'" class="tab-panel">
             <div class="panel-header">
               <h3>内容聚合策略配置</h3>
-              <p class="panel-description">配置系统如何聚合和展示内容</p>
+              <p class="panel-description">配置AI模型参数和API设置，用于文章内容聚合、摘要生成和知识图谱构建</p>
             </div>
             
-            <div class="ai-config-form">
-              <div class="config-section">
-                <h4 class="section-title">
-                  <AppIcon icon="fas fa-sliders-h" :size="ICON_SIZES.SM" />
-                  基础配置
-                </h4>
+            <div class="config-section">
+              <div class="config-group">
+                <h4>基础配置</h4>
                 
                 <div class="form-group">
-                  <label>默认模型</label>
-                  <div class="select-wrapper">
-                    <select v-model="aiConfig.defaultModel">
-                      <option value="glm">智谱GLM</option>
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="zhipu">智谱AI</option>
-                    </select>
-                  </div>
+                  <label>默认模型:</label>
+                  <select v-model="aiConfig.defaultModel" class="form-input form-select">
+                    <option value="zhipuai">智谱AI (GLM)</option>
+                    <option value="deepseek">DeepSeek</option>
+                  </select>
                 </div>
                 
                 <div class="form-group">
-                  <label>模型版本</label>
-                  <div class="select-wrapper">
-                    <select v-model="aiConfig.modelVersion">
-                      <option value="latest">最新版本</option>
-                      <option value="4.0">4.0</option>
-                      <option value="3.5">3.5</option>
-                    </select>
-                  </div>
+                  <label>模型版本:</label>
+                  <select v-model="aiConfig.modelVersion" class="form-input form-select">
+                    <option v-if="aiConfig.defaultModel === 'zhipuai'" value="GLM-4">GLM-4</option>
+                    <option v-if="aiConfig.defaultModel === 'zhipuai'" value="GLM-4-Flash">GLM-4-Flash</option>
+                    <option v-if="aiConfig.defaultModel === 'zhipuai'" value="GLM-3-Turbo">GLM-3-Turbo</option>
+                    <option v-if="aiConfig.defaultModel === 'deepseek'" value="deepseek-chat">DeepSeek Chat</option>
+                    <option v-if="aiConfig.defaultModel === 'deepseek'" value="deepseek-coder">DeepSeek Coder</option>
+                  </select>
                 </div>
               </div>
               
-              <div class="config-section">
-                <h4 class="section-title">
-                  <AppIcon icon="fas fa-key" :size="ICON_SIZES.SM" />
-                  API设置
-                </h4>
+              <div class="config-group">
+                <h4>API设置</h4>
                 
                 <div class="form-group">
-                  <label>API端点URL</label>
+                  <label>API端点URL:</label>
                   <input 
                     type="text" 
                     v-model="aiConfig.apiUrl" 
-                    placeholder="例如: https://api.zhipu.ai/v1"
+                    class="form-input"
+                    :placeholder="aiConfig.defaultModel === 'zhipuai' ? 'https://open.bigmodel.cn/api/paas' : 'https://api.deepseek.com'"
                   />
                 </div>
                 
                 <div class="form-group">
-                  <label>API密钥</label>
-                  <div class="api-key-input">
+                  <label>API密钥:</label>
+                  <div class="api-key-field">
                     <input 
                       :type="showApiKey ? 'text' : 'password'" 
                       v-model="aiConfig.apiKey" 
-                      placeholder="输入API密钥"
+                      class="form-input"
+                      placeholder="输入API密钥" 
                     />
                     <button 
                       type="button" 
-                      class="toggle-visibility" 
+                      class="visibility-toggle" 
                       @click="showApiKey = !showApiKey"
                     >
                       {{ showApiKey ? '隐藏' : '显示' }}
                     </button>
                   </div>
                 </div>
-              </div>
-              
-              <div class="config-section">
-                <h4 class="section-title">
-                  <AppIcon icon="fas fa-cogs" :size="ICON_SIZES.SM" />
-                  高级选项
-                </h4>
                 
                 <div class="form-group">
-                  <label>请求超时(秒)</label>
-                  <input 
-                    type="number" 
-                    v-model="aiConfig.timeout" 
-                    min="5" 
-                    max="120"
-                  />
-                </div>
-                
-                <div class="form-group">
-                  <label>最大令牌数</label>
-                  <input 
-                    type="number" 
-                    v-model="aiConfig.maxTokens" 
-                    min="100" 
-                    max="4000"
-                  />
-                </div>
-                
-                <div class="form-group switch-group">
-                  <label>流式响应</label>
-                  <div class="switch">
-                    <input 
-                      type="checkbox" 
-                      id="stream-toggle" 
-                      v-model="aiConfig.streamResponse"
+                  <button 
+                    type="button" 
+                    class="btn btn-primary"
+                    @click="testAiConnection"
+                    :disabled="testingConnection"
+                  >
+                    {{ testingConnection ? '测试中...' : '测试连接' }}
+                  </button>
+                  
+                  <div v-if="aiTestResult" class="connection-result" :class="{ 'success': aiTestResult.success, 'error': !aiTestResult.success }">
+                    <AppIcon 
+                      :icon="aiTestResult.success ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'" 
+                      :size="ICON_SIZES.SM" 
                     />
-                    <label for="stream-toggle"></label>
+                    <span>{{ aiTestResult.message }}</span>
                   </div>
                 </div>
               </div>
               
-              <div class="form-actions">
-                <button 
-                  type="button" 
-                  class="btn-secondary"
-                  @click="resetAiConfig"
-                >
-                  重置
+              <div class="config-group">
+                <h4>高级选项</h4>
+                
+                <div class="form-group">
+                  <label>请求超时 (秒):</label>
+                  <input type="number" v-model.number="aiConfig.timeout" min="1" max="120" class="form-input" />
+                </div>
+                
+                <div class="form-group">
+                  <label>最大令牌数:</label>
+                  <input type="number" v-model.number="aiConfig.maxTokens" min="100" max="8000" class="form-input" />
+                </div>
+                
+                <div class="form-group">
+                  <label>温度参数 (0.0-1.0):</label>
+                  <input type="number" v-model.number="aiConfig.temperature" min="0" max="1" step="0.1" class="form-input" />
+                </div>
+                
+                <div class="form-group switch-control">
+                  <label>流式响应:</label>
+                  <label class="switch">
+                    <input type="checkbox" v-model="aiConfig.streamResponse">
+                    <span class="slider round"></span>
+                  </label>
+                  <span class="switch-label">{{ aiConfig.streamResponse ? '开启' : '关闭' }}</span>
+                </div>
+              </div>
+              
+              <div class="action-buttons">
+                <button type="button" class="btn btn-secondary" @click="resetAiConfig">
+                  重置为默认值
                 </button>
-                <button 
-                  type="button" 
-                  class="btn-primary"
-                  @click="saveAiConfig"
-                >
+                <button type="button" class="btn btn-primary" @click="saveAiConfig">
                   保存配置
                 </button>
-              </div>
-            </div>
-            
-            <div class="config-test">
-              <h4 class="section-title">
-                <AppIcon icon="fas fa-vial" :size="ICON_SIZES.SM" />
-                测试连接
-              </h4>
-              <p class="section-description">发送测试请求检查AI服务连接状态</p>
-              <button 
-                type="button" 
-                class="btn-test"
-                @click="testAiConnection"
-                :disabled="testingConnection"
-              >
-                {{ testingConnection ? '测试中...' : '测试连接' }}
-              </button>
-              
-              <div class="test-result" v-if="aiTestResult">
-                <div class="status" :class="aiTestResult.success ? 'success' : 'error'">
-                  {{ aiTestResult.success ? '连接成功' : '连接失败' }}
-                </div>
-                <div class="message">{{ aiTestResult.message }}</div>
               </div>
             </div>
           </div>
@@ -318,98 +334,66 @@
           <!-- 知识关联算法配置面板 -->
           <div v-if="activeTab === 'knowledge-algo'" class="tab-panel">
             <div class="panel-header">
-              <h3>知识关联算法配置</h3>
               <p class="panel-description">调整知识图谱和内容关联的算法参数</p>
-        </div>
+            </div>
             
             <div class="ai-config-form">
               <div class="config-section">
                 <h4 class="section-title">
-                  <AppIcon icon="fas fa-brain" :size="ICON_SIZES.SM" />
-                  AI提示词配置
+                  <AppIcon icon="fas fa-book-reader" :size="ICON_SIZES.SM" />
+                  AI阅读助手快捷提示词
                 </h4>
                 
                 <div class="form-group">
-                  <label>知识抽取提示词</label>
-                  <textarea
-                    v-model="knowledgeConfig.extractPrompt"
-                    rows="4"
-                    placeholder="输入用于知识抽取的提示词模板..."
-                  ></textarea>
-      </div>
-                
-                <div class="form-group">
-                  <label>关系构建提示词</label>
-                  <textarea
-                    v-model="knowledgeConfig.relationPrompt"
-                    rows="4"
-                    placeholder="输入用于构建知识关系的提示词模板..."
-                  ></textarea>
-                </div>
-                
-                <div class="form-group">
-                  <label>摘要生成提示词</label>
-                  <textarea
-                    v-model="knowledgeConfig.summaryPrompt"
-                    rows="4"
-                    placeholder="输入用于生成内容摘要的提示词模板..."
-                  ></textarea>
+                  <label>文章阅读页快捷提示词</label>
+                  <div class="reader-prompts-list">
+                    <div 
+                      v-for="(prompt, index) in readerPrompts.quickPrompts" 
+                      :key="index"
+                      class="prompt-item"
+                    >
+                      <input 
+                        type="text" 
+                        v-model="readerPrompts.quickPrompts[index]" 
+                        class="form-input"
+                        placeholder="输入快捷提示词"
+                      />
+                      <button 
+                        type="button" 
+                        class="btn-remove" 
+                        @click="removePrompt(index)"
+                        aria-label="删除提示词"
+                      >
+                        <AppIcon icon="fas fa-times" :size="ICON_SIZES.XS" />
+                      </button>
+                    </div>
+                    
+                    <button 
+                      type="button" 
+                      class="btn-add" 
+                      @click="addPrompt"
+                      v-if="readerPrompts.quickPrompts.length < 8"
+                    >
+                      <AppIcon icon="fas fa-plus" :size="ICON_SIZES.XS" />
+                      添加提示词
+                    </button>
+                  </div>
+                  <div class="form-help">这些提示词将显示在文章阅读页面底部的AI助手快捷按钮中</div>
                 </div>
               </div>
 
-              <div class="config-section">
-                <h4 class="section-title">
-                  <AppIcon icon="fas fa-cogs" :size="ICON_SIZES.SM" />
-                  算法参数
-                </h4>
-                
-                <div class="form-group">
-                  <label>相似度阈值</label>
-                  <input 
-                    type="range" 
-                    v-model="knowledgeConfig.similarityThreshold" 
-                    min="0" 
-                    max="1"
-                    step="0.05"
-                  />
-                  <div class="range-value">{{knowledgeConfig.similarityThreshold}}</div>
-                </div>
-                
-                <div class="form-group">
-                  <label>最大关联节点数</label>
-                  <input 
-                    type="number" 
-                    v-model="knowledgeConfig.maxRelatedNodes" 
-                    min="1" 
-                    max="100"
-                  />
-                </div>
-                
-                <div class="form-group switch-group">
-                  <label>启用自动关联</label>
-                  <div class="switch">
-                    <input 
-                      type="checkbox" 
-                      id="auto-relate-toggle" 
-                      v-model="knowledgeConfig.enableAutoRelation"
-                    />
-                    <label for="auto-relate-toggle"></label>
-                  </div>
-                </div>
-              </div>
-              
               <div class="form-actions">
                 <button 
                   type="button" 
-                  class="btn-secondary"
-                  @click="resetKnowledgeConfig"
+                  class="btn btn-secondary"
+                  @click="resetConfigs"
                 >
                   重置
                 </button>
                 <button 
                   type="button" 
-                  class="btn-primary"
-                  @click="saveKnowledgeConfig"
+                  class="btn btn-primary"
+                  @click="saveConfigs"
                 >
                   保存配置
                 </button>
@@ -424,31 +408,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import AppIcon from '@/components/common/AppIcon.vue'
 import { ICONS, ICON_SIZES } from '@/constants/icons'
+import AppIcon from '@/components/common/AppIcon.vue'
+import { ElMessage } from 'element-plus'
+import { AdminService } from '@/services/adminService'
+import type { AdminUser, RssSourceStatus } from '@/api/types/admin'
 
-// 接口定义
-interface User {
-  id: string
-  username: string
-  email: string
-  roles: string[]
-  enabled: boolean
-  createdAt: string
-}
-
-interface RssSource {
-  id: string
-  title: string
-  url: string
-  active: boolean
-  articleCount: number
-  lastUpdate: Date
+// 修改接口定义，使其与后端返回的AdminUser类型兼容
+interface User extends AdminUser {
+  // 继承AdminUser接口中的所有字段
 }
 
 // 响应式数据
 const activeTab = ref('users')
 const userSearchQuery = ref('')
+const isLoadingUsers = ref(false)
+const isLoadingRss = ref(false)
 
 const stats = ref({
   userCount: 0,
@@ -463,13 +438,14 @@ const systemStatus = ref({
 })
 
 const aiConfig = ref({
-  defaultModel: 'glm',
-  modelVersion: 'latest',
-  apiUrl: '',
+  defaultModel: 'zhipuai',
+  modelVersion: 'GLM-4-Flash',
+  apiUrl: 'https://open.bigmodel.cn/api/paas',
   apiKey: '',
   timeout: 10,
-  maxTokens: 1000,
-  streamResponse: true
+  maxTokens: 2000,
+  streamResponse: true,
+  temperature: 0.7
 })
 
 const knowledgeConfig = ref({
@@ -485,43 +461,18 @@ const showApiKey = ref(false)
 const testingConnection = ref(false)
 const aiTestResult = ref<{ success: boolean; message: string } | null>(null)
 
-const mockUsers = ref<User[]>([
-  {
-    id: '1',
-    username: 'admin',
-    email: 'admin@example.com',
-    roles: ['ROLE_ADMIN'],
-    enabled: true,
-    createdAt: '2025-05-28T08:30:00Z'
-  },
-  {
-    id: '2',
-    username: 'zzq',
-    email: 'zzq@example.com',
-    roles: ['ROLE_USER'],
-    enabled: true,
-    createdAt: '2025-05-28T10:15:00Z'
-  }
-])
+const users = ref<User[]>([])
+const rssSources = ref<RssSourceStatus[]>([])
 
-const mockRssData = ref<RssSource[]>([
-  {
-    id: '1',
-    title: 'Tech News',
-    url: 'https://example.com/tech-rss',
-    active: true,
-    articleCount: 156,
-    lastUpdate: new Date(Date.now() - 10 * 60 * 1000)
-  },
-  {
-    id: '2',
-    title: 'Design Blog',
-    url: 'https://example.com/design-rss',
-    active: true,
-    articleCount: 89,
-    lastUpdate: new Date(Date.now() - 30 * 60 * 1000)
-  }
-])
+const readerPrompts = ref({
+  quickPrompts: [
+    '总结这篇文章的主要内容',
+    '提取文章的关键观点',
+    '解释文章中的专业术语',
+    '分析文章的论证逻辑',
+    '这篇文章有什么启发？'
+  ]
+})
 
 const tabs = [
   { key: 'users', label: '用户管理', icon: 'fas fa-users' },
@@ -532,10 +483,10 @@ const tabs = [
 
 // 计算属性
 const filteredUsers = computed(() => {
-  if (!userSearchQuery.value) return mockUsers.value
+  if (!userSearchQuery.value) return users.value
   
   const query = userSearchQuery.value.toLowerCase()
-  return mockUsers.value.filter(user => 
+  return users.value.filter(user => 
     user.username.toLowerCase().includes(query) ||
     user.email.toLowerCase().includes(query)
   )
@@ -567,7 +518,8 @@ const formatDate = (dateString: string) => {
   })
 }
 
-const formatRelativeTime = (date: Date) => {
+const formatRelativeTime = (dateString: string | Date) => {
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const minutes = Math.floor(diff / (1000 * 60))
@@ -583,57 +535,243 @@ const formatRelativeTime = (date: Date) => {
   }
 }
 
-const resetAiConfig = () => {
-  aiConfig.value = {
-    defaultModel: 'glm',
-    modelVersion: 'latest',
-    apiUrl: '',
-    apiKey: '',
-    timeout: 10,
-    maxTokens: 1000,
-    streamResponse: true
+/**
+ * 重置AI配置
+ */
+const resetAiConfig = async () => {
+  if (confirm('确定要重置为默认配置吗？此操作不可撤销。')) {
+    try {
+      aiConfig.value = AdminService.getDefaultAiConfig()
+      ElMessage.success('AI配置已重置为默认值')
+    } catch (error) {
+      console.error('重置AI配置失败:', error)
+      ElMessage.error('重置AI配置失败')
+    }
   }
 }
 
-const resetKnowledgeConfig = () => {
-  knowledgeConfig.value = {
-    extractPrompt: '请从以下内容中抽取重要的知识实体:\n\n{{content}}',
-    relationPrompt: '请分析以下实体之间的关联关系:\n\n{{entities}}',
-    summaryPrompt: '请对以下内容进行简洁摘要:\n\n{{content}}',
-    similarityThreshold: 0.75,
-    maxRelatedNodes: 20,
-    enableAutoRelation: true
+/**
+ * 重置知识关联配置
+ */
+const resetKnowledgeConfig = async () => {
+  if (confirm('确定要重置为默认配置吗？此操作不可撤销。')) {
+    try {
+      // 这里可以使用从后端获取的默认配置，也可以使用本地硬编码的默认值
+      knowledgeConfig.value = {
+        extractPrompt: '从文本中提取关键概念和实体',
+        relationPrompt: '分析两个概念之间的关系',
+        summaryPrompt: '生成一个简短的摘要',
+        similarityThreshold: 0.5,
+        maxRelatedNodes: 5,
+        enableAutoRelation: true
+      }
+      ElMessage.success('知识关联配置已重置为默认值')
+    } catch (error) {
+      console.error('重置知识关联配置失败:', error)
+      ElMessage.error('重置知识关联配置失败')
+    }
   }
 }
 
-const saveAiConfig = () => {
-  // 实现保存配置的逻辑
+const saveAiConfig = async () => {
+  try {
+    const updatedConfig = await AdminService.updateAiConfig(aiConfig.value)
+    aiConfig.value = updatedConfig
+    alert('AI配置保存成功')
+  } catch (error) {
+    console.error('保存AI配置失败:', error)
+    alert('保存失败: ' + (error instanceof Error ? error.message : String(error)))
+  }
 }
 
-const saveKnowledgeConfig = () => {
-  // 实现保存知识配置的逻辑
+const saveKnowledgeConfig = async () => {
+  try {
+    const updatedConfig = await AdminService.updateKnowledgeConfig(knowledgeConfig.value)
+    knowledgeConfig.value = updatedConfig
+    alert('知识关联配置保存成功')
+  } catch (error) {
+    console.error('保存知识关联配置失败:', error)
+    alert('保存失败: ' + (error instanceof Error ? error.message : String(error)))
+  }
 }
 
 const testAiConnection = async () => {
   testingConnection.value = true
+  aiTestResult.value = null
+  
   try {
-    // 实现测试连接的逻辑
-    aiTestResult.value = { success: true, message: '连接成功' }
-  } catch (error: any) {
-    aiTestResult.value = { success: false, message: error.message || '连接失败' }
+    const result = await AdminService.testAiConnection(aiConfig.value)
+    aiTestResult.value = {
+      success: result.success,
+      message: result.message
+    }
+  } catch (error) {
+    aiTestResult.value = {
+      success: false,
+      message: error instanceof Error ? error.message : '连接测试失败'
+    }
   } finally {
     testingConnection.value = false
   }
 }
 
+const updateUserStatus = async (userId: string | number, enabled: boolean) => {
+  try {
+    const success = await AdminService.updateUserStatus(String(userId), enabled)
+    if (success) {
+      // 更新本地用户数据
+      const userIndex = users.value.findIndex(u => String(u.id) === String(userId))
+      if (userIndex !== -1) {
+        users.value[userIndex].enabled = enabled
+      }
+    }
+  } catch (error) {
+    console.error('更新用户状态失败:', error)
+  }
+}
+
+const loadUsers = async (query?: string) => {
+  isLoadingUsers.value = true
+  try {
+    const { users: userList } = await AdminService.getUserList(query)
+    users.value = userList
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+  } finally {
+    isLoadingUsers.value = false
+  }
+}
+
+const loadRssSources = async () => {
+  isLoadingRss.value = true
+  try {
+    const { sources } = await AdminService.getRssSourcesStatus()
+    rssSources.value = sources
+  } catch (error) {
+    console.error('加载RSS源状态失败:', error)
+  } finally {
+    isLoadingRss.value = false
+  }
+}
+
+// 加载 AI 配置
+const loadAiConfig = async () => {
+  try {
+    const config = await AdminService.getAiConfig()
+    aiConfig.value = config
+  } catch (error) {
+    console.error('加载AI配置失败:', error)
+    // 加载失败时使用默认配置
+    resetAiConfig()
+  }
+}
+
+// 加载知识关联配置
+const loadKnowledgeConfig = async () => {
+  try {
+    const config = await AdminService.getKnowledgeConfig()
+    knowledgeConfig.value = config
+  } catch (error) {
+    console.error('加载知识关联配置失败:', error)
+    // 加载失败时使用默认配置
+    resetKnowledgeConfig()
+  }
+}
+
+// 加载阅读助手提示词配置
+const loadReaderAssistantPrompts = async () => {
+  try {
+    const config = await AdminService.getReaderAssistantPrompts()
+    readerPrompts.value = config
+  } catch (error) {
+    console.error('加载阅读助手提示词配置失败:', error)
+    // 加载失败时使用默认配置
+    readerPrompts.value = AdminService.getDefaultReaderAssistantPrompts()
+  }
+}
+
+const addPrompt = () => {
+  if (readerPrompts.value.quickPrompts.length < 8) {
+    readerPrompts.value.quickPrompts.push('')
+  }
+}
+
+const removePrompt = (index: number) => {
+  readerPrompts.value.quickPrompts.splice(index, 1)
+}
+
+const resetConfigs = () => {
+  // 重置知识关联配置
+  resetKnowledgeConfig()
+  
+  // 重置阅读助手提示词配置
+  resetReaderAssistantPrompts()
+}
+
+const saveConfigs = async () => {
+  try {
+    // 保存知识关联配置
+    const updatedKnowledgeConfig = await AdminService.updateKnowledgeConfig(knowledgeConfig.value)
+    knowledgeConfig.value = updatedKnowledgeConfig
+    
+    // 保存阅读助手提示词配置
+    const updatedReaderPrompts = await AdminService.updateReaderAssistantPrompts(readerPrompts.value)
+    readerPrompts.value = updatedReaderPrompts
+    
+    alert('所有配置保存成功')
+  } catch (error) {
+    console.error('保存配置失败:', error)
+    alert('保存失败: ' + (error instanceof Error ? error.message : String(error)))
+  }
+}
+
+/**
+ * 重置AI阅读助手提示词配置
+ */
+const resetReaderAssistantPrompts = async () => {
+  if (confirm('确定要重置为默认配置吗？此操作不可撤销。')) {
+    try {
+      // 使用硬编码的默认提示词
+      readerPrompts.value = AdminService.getDefaultReaderAssistantPrompts()
+      ElMessage.success('AI阅读助手提示词已重置为默认值')
+    } catch (error) {
+      console.error('重置AI阅读助手提示词失败:', error)
+      ElMessage.error('重置AI阅读助手提示词失败')
+    }
+  }
+}
+
 // 生命周期
-onMounted(() => {
-  // 模拟加载统计数据
-  stats.value = {
-    userCount: 4,
-    rssCount: 10,
-    articleCount: 197,
-    conceptCount: 423
+onMounted(async () => {
+  try {
+    // 加载系统统计数据
+    const systemStats = await AdminService.getSystemStats()
+    stats.value = systemStats
+    
+    // 加载用户列表
+    await loadUsers()
+    
+    // 加载RSS源列表
+    await loadRssSources()
+    
+    // 加载AI配置
+    await loadAiConfig()
+    
+    // 加载知识关联配置
+    await loadKnowledgeConfig()
+    
+    // 加载阅读助手提示词配置
+    await loadReaderAssistantPrompts()
+    
+  } catch (error) {
+    console.error('加载数据失败:', error)
+    // 加载失败时显示默认值
+    stats.value = {
+      userCount: 0,
+      rssCount: 0,
+      articleCount: 0,
+      conceptCount: 0
+    }
   }
 })
 </script>
@@ -779,38 +917,38 @@ onMounted(() => {
 
 .panel-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: calc(var(--spacing-unit) * 6);
-
+  align-items: center;
+  margin-bottom: calc(var(--spacing-unit) * 4);
+  
   h3 {
     font-size: 18px;
     font-weight: 600;
     color: var(--color-text-primary);
     margin: 0;
   }
+}
 
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: calc(var(--spacing-unit) * 2);
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border-primary);
-    border-radius: var(--border-radius-m);
-    padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
-    min-width: 240px;
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 2);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-m);
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
+  min-width: 240px;
 
-    input {
-      border: none;
-      background: transparent;
-      outline: none;
-      color: var(--color-text-primary);
-      font-size: 14px;
-      flex: 1;
+  input {
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--color-text-primary);
+    font-size: 14px;
+    flex: 1;
 
-      &::placeholder {
-        color: var(--color-text-disabled);
-      }
+    &::placeholder {
+      color: var(--color-text-disabled);
     }
   }
 }
@@ -992,6 +1130,7 @@ onMounted(() => {
 
       &::placeholder {
         color: var(--color-text-disabled);
+      }
     }
   }
 
@@ -1050,35 +1189,29 @@ onMounted(() => {
       }
     }
 
-    .api-key-input {
+    .api-key-field {
       position: relative;
-
+      width: 100%;
+      
       input {
         width: 100%;
-        background: var(--color-bg-tertiary);
-        border: 1px solid var(--color-border-primary);
-        border-radius: var(--border-radius-m);
-        padding: calc(var(--spacing-unit) * 2);
-        color: var(--color-text-primary);
+        padding-right: 60px;
       }
-
-      .toggle-visibility {
+      
+      .visibility-toggle {
         position: absolute;
-        right: 10px;
+        right: 2px;
         top: 50%;
         transform: translateY(-50%);
+        padding: 5px 10px;
         background: transparent;
         border: none;
         color: var(--color-text-secondary);
         cursor: pointer;
         font-size: 12px;
-        padding: 4px 8px;
-        border-radius: var(--border-radius-s);
         
         &:hover {
           color: var(--color-accent-primary);
-          background: rgba(123, 97, 255, 0.1);
-          }
         }
       }
     }
@@ -1205,5 +1338,326 @@ onMounted(() => {
   .data-table {
     overflow-x: auto;
   }
+}
+
+.loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing-unit) * 8) 0;
+  color: var(--color-text-secondary);
+  gap: calc(var(--spacing-unit) * 3);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing-unit) * 8) 0;
+  color: var(--color-text-secondary);
+  gap: calc(var(--spacing-unit) * 3);
+}
+
+.status-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 3);
+  border-radius: var(--border-radius-s);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-speed-fast);
+}
+
+.status-toggle-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 4);
+  border-radius: var(--border-radius-m);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-speed-fast);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  margin-top: calc(var(--spacing-unit) * 1);
+  font-size: 12px;
+  color: var(--color-text-danger);
+}
+
+.reader-prompts-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 2);
+  width: 100%;
+  
+  .prompt-item {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing-unit) * 2);
+    
+    .form-input {
+      flex: 1;
+    }
+    
+    .btn-remove {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 24px;
+      height: 24px;
+      background: rgba(220, 53, 69, 0.1);
+      color: #dc3545;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background: rgba(220, 53, 69, 0.2);
+      }
+    }
+  }
+  
+  .btn-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing-unit) * 2);
+    padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 4);
+    margin-top: calc(var(--spacing-unit) * 2);
+    background: var(--color-bg-tertiary);
+    border: 1px dashed var(--color-border-primary);
+    border-radius: var(--border-radius-m);
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: flex-start;
+    
+    &:hover {
+      background: var(--color-bg-hover);
+      color: var(--color-text-primary);
+    }
+  }
+}
+
+.form-help {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: calc(var(--spacing-unit) * 1);
+}
+
+.connection-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: var(--border-radius-m);
+  font-size: 14px;
+  
+  &.success {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+  }
+  
+  &.error {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+  }
+}
+
+.form-input {
+  width: 100%;
+  padding: calc(var(--spacing-unit) * 2.5) calc(var(--spacing-unit) * 3.5);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-m);
+  transition: border-color var(--transition-speed-fast), box-shadow var(--transition-speed-fast), background-color var(--transition-speed-fast);
+  outline: none;
+
+  &:focus {
+    border-color: var(--color-accent-primary);
+    background-color: var(--color-bg-tertiary);
+    box-shadow: 0 0 0 2px rgba(123, 97, 255, 0.1);
+  }
+
+  &::placeholder {
+    color: var(--color-text-disabled);
+  }
+}
+
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23A8A8B3' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right calc(var(--spacing-unit) * 2.5) center;
+  background-repeat: no-repeat;
+  background-size: 16px 12px;
+  padding-right: calc(var(--spacing-unit) * 8);
+}
+
+.api-key-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+
+  .form-input {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+  }
+
+  .visibility-toggle {
+    height: 100%;
+    padding: calc(var(--spacing-unit) * 2.5) calc(var(--spacing-unit) * 3.5);
+    background-color: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-primary);
+    border-left: none;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    border-top-right-radius: var(--border-radius-m);
+    border-bottom-right-radius: var(--border-radius-m);
+    transition: all var(--transition-speed-fast);
+
+    &:hover {
+      background-color: var(--color-bg-hover);
+      color: var(--color-text-primary);
+    }
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing-unit) * 2.5) calc(var(--spacing-unit) * 5);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--border-radius-m);
+  cursor: pointer;
+  transition: all var(--transition-speed-fast);
+  border: none;
+  
+  &.btn-primary {
+    background-color: var(--color-accent-primary);
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background-color: var(--color-accent-primary-hover);
+    }
+  }
+  
+  &.btn-secondary {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-primary);
+    
+    &:hover:not(:disabled) {
+      background-color: var(--color-bg-hover);
+    }
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--spacing-unit) * 4);
+  margin-top: calc(var(--spacing-unit) * 6);
+}
+
+.form-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--color-bg-tertiary);
+  border-radius: 3px;
+  outline: none;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--color-accent-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-speed-fast);
+    
+    &:hover {
+      background: var(--color-accent-primary-hover);
+      transform: scale(1.1);
+    }
+  }
+  
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--color-accent-primary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-speed-fast);
+    
+    &:hover {
+      background: var(--color-accent-primary-hover);
+      transform: scale(1.1);
+    }
+  }
+}
+
+.form-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  font-family: inherit;
+  padding: calc(var(--spacing-unit) * 3);
+  
+  &:focus {
+    border-color: var(--color-accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(123, 97, 255, 0.1);
+  }
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--spacing-unit) * 4);
+  margin-top: calc(var(--spacing-unit) * 6);
 }
 </style> 

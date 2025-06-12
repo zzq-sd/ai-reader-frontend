@@ -59,6 +59,9 @@ export const aiChatApi = {
     const baseURL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1')
     const url = `${baseURL}/ai/chat/stream`
     
+    console.log('发起流式聊天请求:', url)
+    console.log('流式聊天请求内容:', { message })
+    
     let eventSource: EventSource | null = null
     let isCompleted = false
 
@@ -77,12 +80,37 @@ export const aiChatApi = {
         body: requestBody
       })
       .then(response => {
+        // 记录响应状态和头信息
+        console.log('流式聊天响应状态:', response.status, response.statusText)
+        console.log('流式聊天响应头:', {
+          contentType: response.headers.get('Content-Type'),
+          contentLength: response.headers.get('Content-Length')
+        })
+        
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          const statusText = response.statusText || `HTTP ${response.status}`;
+          throw new Error(`${statusText}`)
         }
 
         if (!response.body) {
           throw new Error('Response body is null')
+        }
+
+        // 检查响应类型，确保是SSE
+        const contentType = response.headers.get('Content-Type')
+        if (!contentType || !contentType.includes('text/event-stream')) {
+          // 尝试读取非SSE响应内容
+          return response.text().then(text => {
+            console.error('非SSE响应内容:', text)
+            try {
+              // 尝试解析JSON
+              const data = JSON.parse(text)
+              throw new Error(data.message || data.error || '服务器返回了非SSE响应')
+            } catch (parseError) {
+              // 如果无法解析JSON，直接返回文本
+              throw new Error(`服务器返回了非SSE响应: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`)
+            }
+          })
         }
 
         const reader = response.body.getReader()
@@ -99,6 +127,8 @@ export const aiChatApi = {
             }
 
             const chunk = decoder.decode(value)
+            console.log('收到流式响应片段:', chunk)
+            
             const lines = chunk.split('\n')
 
             for (const line of lines) {
@@ -166,7 +196,9 @@ export const aiChatApi = {
   async healthCheck(): Promise<HealthCheckResponse> {
     try {
       const baseURL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1')
-      const response = await axios.get<HealthCheckResponse>(`${baseURL}/ai/chat/health`, {
+      const requestUrl = `${baseURL}/ai/chat/health`
+      console.log('AI健康检查请求URL:', requestUrl)
+      const response = await axios.get<HealthCheckResponse>(requestUrl, {
         timeout: 10000,
         headers: {
           'Content-Type': 'application/json'

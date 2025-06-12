@@ -114,9 +114,9 @@
             <i class="fas fa-circle-notch"></i>
             环形布局
           </button>
-          <button class="btn" @click="resetGraph">
-            <i class="fas fa-redo"></i>
-            重置
+          <button class="btn btn-primary" @click="resetGraph">
+            <i class="fas fa-sync-alt"></i>
+            刷新图谱
           </button>
         </div>
       </div>
@@ -582,6 +582,32 @@ onMounted(async () => {
   
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
+  
+  // 确保DOM完全渲染后再初始化D3
+  nextTick(() => {
+    if (graphSvg.value) {
+      // 初始化图谱并自动进行布局
+      initD3Graph();
+      
+      // 延时刷新以确保连线显示
+      setTimeout(() => {
+        console.log('🔄 增强图谱显示...');
+        
+        // 先强制一次布局计算
+        if (simulation) {
+          // 手动运行一些tick以预热布局
+          for (let i = 0; i < 20; i++) {
+            simulation.tick();
+          }
+          
+          // 然后重新渲染
+          updateD3Graph();
+        }
+      }, 1000);
+    } else {
+      console.error('❌ graphSvg引用不可用，无法初始化图谱');
+    }
+  });
 })
 
 onUnmounted(() => {
@@ -660,51 +686,70 @@ const initD3Graph = () => {
     }
   });
   
-  // 创建图形组
-  const g = svg.append('g').attr('class', 'graph-group')
+  // 添加箭头定义
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', '#999');
   
-  // 创建连线组（在节点组之前，确保连线在节点下方）
-  linksG = g.append('g').attr('class', 'links')
+  // 创建图谱组
+  const graphGroup = svg.append('g')
+    .attr('class', 'graph-group')
   
-  // 创建节点组
-  nodesG = g.append('g').attr('class', 'nodes')
+  // 创建连线和节点组（连线在下，节点在上）
+  linksG = graphGroup.append('g').attr('class', 'links')
+  nodesG = graphGroup.append('g').attr('class', 'nodes')
   
-  // 创建力导向模拟
+  // 初始化力导向模拟 - 优化配置参数
   simulation = d3.forceSimulation()
     .force('link', d3.forceLink()
       .id((d: any) => d.id)
-      .distance((d: any) => {
-        // 根据连线类型调整距离
-        switch (d.type) {
-          case 'CONTAINS': return 80;
-          case 'DISCUSSES': return 120;
-          case 'RELATED_TO':
-          default: return 100;
-        }
-      })
-      .strength(0.1)
+      .distance(d => 100 + Math.random() * 50) // 动态连线距离，增加随机性避免重叠
+      .strength(0.7)  // 调整连线强度，平衡图谱布局
     )
     .force('charge', d3.forceManyBody()
-      .strength((d: any) => {
-        // 根据节点重要性调整排斥力
-        const importance = d.importance || 0.5;
-        return -300 * (1 + importance);
-      })
+      .strength((d: any) => -350 - ((d as any).importance || 0.5) * 200) // 根据节点重要性调整斥力
+      .distanceMax(600)  // 增加电荷作用的最大距离
+      .distanceMin(20)   // 设置最小距离避免节点过于靠近
     )
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide()
-      .radius((d: any) => {
-        const size = d.size || d.importance * 10 || 8;
-        return Math.max(10, size + 5); // 防止节点重叠
-      })
-    )
-    .alphaDecay(0.01) // 减慢衰减速度，让动画更平滑
-    .velocityDecay(0.3); // 增加阻尼，减少抖动
+    .force('collision', d3.forceCollide((d: any) => ((d as any).importance || 0.5) * 25 + 15)) // 根据节点重要性设置碰撞半径
+    .force('x', d3.forceX(width / 2).strength(0.03)) // 轻微的X方向引力
+    .force('y', d3.forceY(height / 2).strength(0.03)) // 轻微的Y方向引力
+    .alphaDecay(0.008) // 减慢衰减速度，让动画更平滑
+    .velocityDecay(0.35); // 增加阻尼，减少抖动
   
   console.log('✅ D3图谱初始化完成');
   
   // 初始化后立即更新图谱
-  updateD3Graph()
+  updateD3Graph();
+  
+  // 执行布局预热，提高初始渲染效果
+  if (filteredNodes.value.length > 0 && simulation) {
+    console.log('⏱️ 执行布局预热，提高初始渲染效果...');
+    // 手动执行多次tick预先计算布局
+    for (let i = 0; i < 50; i++) {
+      simulation.tick();
+    }
+    // 更新节点和连线位置
+    updateNodeAndLinkPositions();
+  }
+  
+  // 添加额外的延时刷新，确保连线正确显示
+  setTimeout(() => {
+    console.log('⏱️ 执行延时刷新以确保连线正确显示');
+    if (filteredNodes.value.length > 0) {
+      // 重新启动模拟
+      simulation.alpha(0.3).restart();
+    }
+  }, 500);
 }
 
 // 更新D3图谱
@@ -720,49 +765,139 @@ const updateD3Graph = () => {
     filteredNodes: filteredNodes.value.length
   });
 
-  // 过滤有效的连线
-  const filteredLinks = graphData.value.links.filter(link => {
-    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    
-    const sourceNode = graphData.value.nodes.find(n => n.id === sourceId);
-    const targetNode = graphData.value.nodes.find(n => n.id === targetId);
-    
-    const isValid = sourceNode && targetNode && 
-           filteredNodes.value.includes(sourceNode) && 
-           filteredNodes.value.includes(targetNode);
-    
-    if (!isValid) {
-      console.warn('⚠️ 过滤无效连线:', { sourceId, targetId, hasSource: !!sourceNode, hasTarget: !!targetNode });
-    }
-    
-    return isValid;
+  // 转换连线引用 - 确保它们引用实际节点对象而不是字符串ID
+  const nodeById: Record<string, GraphNode> = {};
+  filteredNodes.value.forEach(node => {
+    nodeById[node.id] = node;
   });
+  
+  console.log(`🔍 节点映射表创建完成，包含 ${Object.keys(nodeById).length} 个节点`);
+  
+  // 过滤并处理连线
+  const filteredLinks = graphData.value.links.filter(link => {
+    try {
+      // 获取源节点和目标节点ID
+      const sourceId = typeof link.source === 'object' && link.source ? link.source.id : 
+                      typeof link.source === 'string' ? link.source : null;
+      const targetId = typeof link.target === 'object' && link.target ? link.target.id : 
+                      typeof link.target === 'string' ? link.target : null;
+      
+      if (!sourceId || !targetId) {
+        console.warn('⚠️ 跳过无效连线 - 无法确定源或目标ID:', link);
+        return false;
+      }
+      
+      // 检查源节点和目标节点是否存在于当前过滤的节点列表中
+      const sourceExists = filteredNodes.value.some(n => n.id === sourceId);
+      const targetExists = filteredNodes.value.some(n => n.id === targetId);
+      
+      // 只保留源节点和目标节点都存在的连线
+      return sourceExists && targetExists;
+    } catch (error) {
+      console.error('❌ 处理连线时出错:', error, link);
+      return false;
+    }
+  }).map(link => {
+    try {
+      // 创建一个新的连线对象，确保source和target是对象引用
+      const sourceId = typeof link.source === 'object' && link.source ? link.source.id : 
+                      typeof link.source === 'string' ? link.source : null;
+      const targetId = typeof link.target === 'object' && link.target ? link.target.id : 
+                      typeof link.target === 'string' ? link.target : null;
+      
+      if (!sourceId || !targetId) {
+        console.warn('⚠️ 无效的连线ID:', { source: link.source, target: link.target });
+        return null;
+      }
+      
+      const sourceNode = nodeById[sourceId];
+      const targetNode = nodeById[targetId];
+      
+      // 只有当我们可以解析源和目标节点时才返回连线
+      if (sourceNode && targetNode) {
+        return {
+          ...link,
+          source: sourceNode,  // 确保使用节点对象
+          target: targetNode,  // 确保使用节点对象
+          // 添加额外的调试信息
+          _debugSourceId: sourceId,
+          _debugTargetId: targetId
+        };
+      }
+      
+      if (!sourceNode) console.warn(`⚠️ 找不到源节点: ${sourceId}`);
+      if (!targetNode) console.warn(`⚠️ 找不到目标节点: ${targetId}`);
+      
+      return null;
+    } catch (error) {
+      console.error('❌ 转换连线时出错:', error, link);
+      return null;
+    }
+  }).filter(Boolean) as GraphLink[]; // 移除null值
 
   console.log('🔗 过滤后的连线数:', filteredLinks.length);
+  
+  // 连线深度调试
+  if (filteredLinks.length > 0) {
+    console.log('🔍 连线示例:', filteredLinks[0]);
+    console.log('🔍 连线源节点类型:', typeof filteredLinks[0].source);
+    console.log('🔍 连线目标节点类型:', typeof filteredLinks[0].target);
+    
+    if (typeof filteredLinks[0].source !== 'object' || typeof filteredLinks[0].target !== 'object') {
+      console.error('⚠️ 连线仍然使用字符串引用而不是对象引用!');
+    }
+    
+    // 额外检查连线是否都正确引用节点对象
+    const invalidLinks = filteredLinks.filter(link => 
+      typeof link.source !== 'object' || typeof link.target !== 'object'
+    );
+    
+    if (invalidLinks.length > 0) {
+      console.error(`❌ 发现 ${invalidLinks.length} 条无效连线:`, invalidLinks);
+      // 尝试修复无效连线 - 强制转换字符串ID为节点对象
+      for (const link of invalidLinks) {
+        if (typeof link.source === 'string' && nodeById[link.source]) {
+          console.log(`🛠️ 修复连线源节点: ${link.source} -> ${nodeById[link.source].name}`);
+          link.source = nodeById[link.source];
+        }
+        if (typeof link.target === 'string' && nodeById[link.target]) {
+          console.log(`🛠️ 修复连线目标节点: ${link.target} -> ${nodeById[link.target].name}`);
+          link.target = nodeById[link.target];
+        }
+      }
+    }
+  } else {
+    console.warn('⚠️ 过滤后没有可用的连线!');
+  }
 
   // 更新连线
   const links = linksG.selectAll('line')
     .data(filteredLinks, (d: any) => {
-      const sourceId = typeof d.source === 'string' ? d.source : d.source.id;
-      const targetId = typeof d.target === 'string' ? d.target : d.target.id;
+      // 当source和target是对象时，使用它们的id创建唯一标识
+      const sourceId = typeof d.source === 'object' && d.source ? d.source.id : d.source;
+      const targetId = typeof d.target === 'object' && d.target ? d.target.id : d.target;
       return `${sourceId}-${targetId}`;
     });
 
+  // 移除不再需要的连线
   links.exit().remove();
 
+  // 添加新连线
   const linksEnter = links.enter().append('line')
     .attr('class', 'link')
     .style('stroke', '#A0A0A5')
-    .style('stroke-opacity', 0.3)
-    .style('stroke-width', 1.5);
+    .style('stroke-opacity', 0.8)  // 增加不透明度使连线更明显
+    .style('stroke-width', 2.5)    // 增加线宽使连线更明显
+    .style('stroke-linecap', 'round'); // 添加圆形线帽，使连线更美观
 
   // 更新节点
   const nodes = nodesG.selectAll('circle')
     .data(filteredNodes.value, (d: any) => d.id);
 
+  // 移除不再需要的节点
   nodes.exit().remove();
 
+  // 添加新节点
   const nodesEnter = nodes.enter().append('circle')
     .attr('class', 'node')
     .attr('r', (d: any) => {
@@ -845,12 +980,20 @@ const updateD3Graph = () => {
 
   // 定义tick事件处理
   simulation.on('tick', () => {
-    // 更新连线位置
+    // 更新连线位置 - 确保所有连线坐标都有效
     linksG.selectAll('line')
-      .attr('x1', (d: any) => d.source.x || 0)
-      .attr('y1', (d: any) => d.source.y || 0)
-      .attr('x2', (d: any) => d.target.x || 0)
-      .attr('y2', (d: any) => d.target.y || 0);
+      .attr('x1', (d: any) => {
+        return typeof d.source === 'object' && d.source && d.source.x !== undefined ? d.source.x : 0;
+      })
+      .attr('y1', (d: any) => {
+        return typeof d.source === 'object' && d.source && d.source.y !== undefined ? d.source.y : 0;
+      })
+      .attr('x2', (d: any) => {
+        return typeof d.target === 'object' && d.target && d.target.x !== undefined ? d.target.x : 0;
+      })
+      .attr('y2', (d: any) => {
+        return typeof d.target === 'object' && d.target && d.target.y !== undefined ? d.target.y : 0;
+      });
 
     // 更新节点位置
     nodesG.selectAll('circle')
@@ -870,6 +1013,37 @@ const updateD3Graph = () => {
     渲染节点数: filteredNodes.value.length,
     渲染连线数: filteredLinks.length
   });
+}
+
+// 辅助函数 - 更新节点和连线位置(用于静态布局和预热)
+const updateNodeAndLinkPositions = () => {
+  // 验证D3组件已经初始化
+  if (!svg || !linksG || !nodesG) return;
+  
+  // 更新连线位置
+  linksG.selectAll('line')
+    .attr('x1', (d: any) => {
+      return typeof d.source === 'object' && d.source && d.source.x !== undefined ? d.source.x : 0;
+    })
+    .attr('y1', (d: any) => {
+      return typeof d.source === 'object' && d.source && d.source.y !== undefined ? d.source.y : 0;
+    })
+    .attr('x2', (d: any) => {
+      return typeof d.target === 'object' && d.target && d.target.x !== undefined ? d.target.x : 0;
+    })
+    .attr('y2', (d: any) => {
+      return typeof d.target === 'object' && d.target && d.target.y !== undefined ? d.target.y : 0;
+    });
+
+  // 更新节点位置
+  nodesG.selectAll('circle')
+    .attr('cx', (d: any) => d.x || 0)
+    .attr('cy', (d: any) => d.y || 0);
+
+  // 更新标签位置
+  nodesG.selectAll('text')
+    .attr('x', (d: any) => d.x || 0)
+    .attr('y', (d: any) => d.y || 0);
 }
 
 // 更新布局
@@ -990,7 +1164,19 @@ const resetZoom = () => {
 }
 
 const resetGraph = () => {
-  loadGraphData()
+  // 先清除选择的节点
+  closeDetails();
+  
+  // 重置搜索和过滤器
+  searchQuery.value = '';
+  filters.value = {
+    concept: true,
+    article: true,
+    note: true
+  };
+  
+  // 重新加载数据
+  loadGraphData();
 }
 
 const refreshData = () => {

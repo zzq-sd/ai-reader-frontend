@@ -130,6 +130,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { aiChatApi, type ChatMessage } from '@/api/aiChat'
+import { ConfigService } from '@/api/services/configService'
 
 // 类型定义
 interface Message {
@@ -175,13 +176,33 @@ const chatAreaRef = ref<HTMLElement>()
 const chatInputRef = ref<HTMLTextAreaElement>()
 
 // 快捷指令
-const quickPrompts: QuickPrompt[] = [
+const quickPrompts = ref<QuickPrompt[]>([
   { text: '总结这篇文章的主要内容' },
   { text: '提取文章的关键观点' },
   { text: '解释文章中的专业术语' },
   { text: '分析文章的论证逻辑' },
   { text: '这篇文章有什么启发？' }
-]
+])
+
+// 加载快捷提示词
+async function loadQuickPrompts() {
+  try {
+    const promptsConfig = await ConfigService.getReaderAssistantPrompts()
+    if (promptsConfig && promptsConfig.quickPrompts && promptsConfig.quickPrompts.length > 0) {
+      quickPrompts.value = promptsConfig.quickPrompts.map(text => ({ text }))
+    }
+  } catch (error) {
+    console.error('加载AI阅读助手快捷提示词失败:', error)
+    // 加载失败时使用默认值
+    quickPrompts.value = [
+      { text: '总结这篇文章的主要内容' },
+      { text: '提取文章的关键观点' },
+      { text: '解释文章中的专业术语' },
+      { text: '分析文章的论证逻辑' },
+      { text: '这篇文章有什么启发？' }
+    ]
+  }
+}
 
 // 计算属性
 const statusText = computed(() => {
@@ -347,9 +368,18 @@ function scrollToBottom() {
 
 // 生命周期
 onMounted(() => {
-  if (chatInputRef.value) {
-    chatInputRef.value.focus()
+  // 加载快捷提示词
+  loadQuickPrompts()
+  
+  // 如果是展开状态，聚焦输入框
+  if (isExpanded.value) {
+    nextTick(() => {
+      chatInputRef.value?.focus()
+    })
   }
+
+  // 滚动到底部
+  scrollToBottom()
 })
 
 onUnmounted(() => {

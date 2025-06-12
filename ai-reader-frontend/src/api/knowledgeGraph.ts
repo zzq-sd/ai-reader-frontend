@@ -189,26 +189,99 @@ function convertBackendDataToFrontend(rawData: any): GraphData {
     return convertedNode;
   });
   
+  // 创建节点ID到节点对象的映射，用于后续链接使用
+  const nodeMap: Record<string, GraphNode> = {};
+  nodes.forEach(node => {
+    nodeMap[node.id] = node;
+  });
+  
   // 处理边数据 - 转换edges为links
-  const links: GraphLink[] = (rawData.edges || []).map((edge: any, index: number) => {
+  const links: GraphLink[] = [];
+  
+  // 确保有效的边数据
+  const edgesArray = rawData.edges || [];
+  console.log(`🔍 处理 ${edgesArray.length} 条边数据`);
+  console.log(`🔧 节点映射表包含 ${Object.keys(nodeMap).length} 个节点`);
+
+  if (edgesArray.length > 0) {
+    // 记录一条示例边数据，帮助调试
+    console.log(`🔍 边数据示例:`, edgesArray[0]);
+  }
+  
+  edgesArray.forEach((edge: any, index: number) => {
+    // 确保source和target字段存在
+    if (!edge.source || !edge.target) {
+      console.warn(`⚠️ 跳过无效边数据，缺少source或target: `, edge);
+      return;
+    }
+    
+    // 验证源节点标识符格式
+    const sourceId = typeof edge.source === 'string' ? edge.source : 
+                    typeof edge.source === 'object' && edge.source && edge.source.id ? edge.source.id : null;
+    
+    // 验证目标节点标识符格式
+    const targetId = typeof edge.target === 'string' ? edge.target : 
+                    typeof edge.target === 'object' && edge.target && edge.target.id ? edge.target.id : null;
+    
+    if (!sourceId || !targetId) {
+      console.warn(`⚠️ 边数据格式不正确，无法提取有效的源或目标ID: `, edge);
+      return;
+    }
+    
+    // 获取source和target对应的节点对象
+    const sourceNode = nodeMap[sourceId];
+    const targetNode = nodeMap[targetId];
+    
+    // 验证源节点和目标节点都存在
+    if (!sourceNode) {
+      console.warn(`⚠️ 边的源节点不存在 - ID: ${sourceId}`);
+      return;
+    }
+    
+    if (!targetNode) {
+      console.warn(`⚠️ 边的目标节点不存在 - ID: ${targetId}`);
+      return;
+    }
+    
+    // 创建连接，确保source和target使用对象引用而非字符串ID
     const convertedLink: GraphLink = {
-      source: edge.source,
-      target: edge.target,
+      source: sourceNode,  // 使用节点对象而非字符串
+      target: targetNode,  // 使用节点对象而非字符串
       type: normalizeRelationType(edge.type || edge.label),
       strength: edge.weight || edge.strength || 1,
       properties: {
         ...edge.properties,
-        label: edge.label,
-        color: edge.color
+        label: edge.label || '关联',
+        color: edge.color || '#999999',
+        // 保留原始属性以便调试
+        originalSource: sourceId,
+        originalTarget: targetId
       }
     };
     
-    console.log(`🔗 边转换: ${edge.source} -> ${edge.target} (${convertedLink.type})`);
-    return convertedLink;
+    console.log(`🔗 边转换 #${index}: ${sourceNode.name} -> ${targetNode.name} (${convertedLink.type})`);
+    links.push(convertedLink);
   });
   
-  // 验证数据完整性
-  validateGraphData(nodes, links);
+  console.log(`✅ 数据转换完成: ${nodes.length} 个节点, ${links.length} 条连线`);
+  
+  // 最终验证：确保所有连线都使用对象引用
+  const objectReferenceValidation = links.every(link => 
+    typeof link.source === 'object' && typeof link.target === 'object'
+  );
+  
+  console.log(`🧪 连线对象引用验证: ${objectReferenceValidation ? '通过✅' : '失败❌'}`);
+  
+  if (!objectReferenceValidation) {
+    console.error('❌ 警告: 有连线仍在使用字符串引用，这将导致D3无法正确渲染连线!');
+    
+    // 打印出问题的连线
+    links.forEach((link, i) => {
+      if (typeof link.source !== 'object' || typeof link.target !== 'object') {
+        console.error(`❌ 连线 #${i} 使用字符串引用: `, link);
+      }
+    });
+  }
   
   return {
     nodes,
@@ -260,7 +333,7 @@ function normalizeRelationType(type: string): 'CONTAINS' | 'RELATED_TO' | 'DISCU
 }
 
 /**
- * 验证图谱数据完整性
+ * 验证图谱数据完整性并过滤无效连线
  */
 function validateGraphData(nodes: GraphNode[], links: GraphLink[]): void {
   console.log('🔍 验证图谱数据完整性...');
@@ -268,15 +341,31 @@ function validateGraphData(nodes: GraphNode[], links: GraphLink[]): void {
   // 创建节点ID集合
   const nodeIds = new Set(nodes.map(node => node.id));
   
-  // 验证边的引用完整性
-  const invalidLinks = links.filter(link => {
+  // 验证边的引用完整性并过滤出有效连线
+  const validLinks: GraphLink[] = [];
+  const invalidLinks: GraphLink[] = [];
+  
+  links.forEach(link => {
     const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
     const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    return !nodeIds.has(sourceId) || !nodeIds.has(targetId);
+    
+    const sourceExists = nodeIds.has(sourceId);
+    const targetExists = nodeIds.has(targetId);
+    
+    if (sourceExists && targetExists) {
+      validLinks.push(link);
+    } else {
+      console.info(`🔄 跳过无效连线引用: ${sourceId} -> ${targetId} {sourceExists: ${sourceExists}, targetExists: ${targetExists}}`);
+      invalidLinks.push(link);
+    }
   });
   
+  // 将无效连线从links数组中移除
+  links.length = 0;
+  links.push(...validLinks);
+  
   if (invalidLinks.length > 0) {
-    console.warn('⚠️ 发现无效边引用:', invalidLinks);
+    console.info(`⚠️ 已过滤 ${invalidLinks.length} 条无效连线，剩余 ${validLinks.length} 条有效连线`);
   }
   
   // 验证节点数据完整性
@@ -288,7 +377,7 @@ function validateGraphData(nodes: GraphNode[], links: GraphLink[]): void {
   console.log('✅ 数据验证完成:', {
     nodes: nodes.length,
     links: links.length,
-    invalidLinks: invalidLinks.length,
+    filteredInvalidLinks: invalidLinks.length,
     invalidNodes: invalidNodes.length
   });
 }
