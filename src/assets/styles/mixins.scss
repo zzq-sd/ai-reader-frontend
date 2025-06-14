@@ -1,0 +1,241 @@
+// 响应式断点 mixins
+@mixin mobile {
+  @media (max-width: 767px) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (max-width: 1023px) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: 1024px) {
+    @content;
+  }
+}
+
+@mixin large-desktop {
+  @media (min-width: 1440px) {
+    @content;
+  }
+}
+
+// 常用混合器
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin absolute-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin text-ellipsis-multiline($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 毛玻璃效果
+@mixin glass-effect($opacity: 0.8) {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, $opacity);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+// 阴影效果
+@mixin card-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@mixin card-shadow-hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+// 按钮样式
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: spacing(2) spacing(4);
+  border: none;
+  border-radius: var(--border-radius-s);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-speed-fast);
+  text-decoration: none;
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@mixin button-primary {
+  @include button-base;
+  background-color: var(--color-accent-primary);
+  color: white;
+  
+  &:hover:not(:disabled) {
+    background-color: var(--color-accent-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(123, 97, 255, 0.3);
+  }
+}
+
+@mixin button-secondary {
+  @include button-base;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-primary);
+  
+  &:hover:not(:disabled) {
+    background-color: var(--color-bg-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-secondary);
+  }
+}
+
+// 输入框样式
+@mixin input-base {
+  width: 100%;
+  padding: spacing(3) spacing(4);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-s);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  transition: all var(--transition-speed-fast);
+  
+  &:focus {
+    outline: none;
+    border-color: var(--color-accent-primary);
+    box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.1);
+  }
+  
+  &::placeholder {
+    color: var(--color-text-disabled);
+  }
+}
+
+// 卡片样式
+@mixin card-base {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-m);
+  padding: spacing(4);
+  transition: all var(--transition-speed-fast);
+}
+
+// 滚动条样式
+@mixin custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: var(--color-bg-primary);
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border-secondary);
+    border-radius: 3px;
+    
+    &:hover {
+      background: var(--color-text-disabled);
+    }
+  }
+}
+
+// 动画关键帧
+@mixin fade-in($duration: 0.3s) {
+  animation: fadeIn $duration ease-out both;
+}
+
+@mixin fade-in-up($duration: 0.3s, $distance: 20px) {
+  animation: fadeInUp $duration ease-out both;
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY($distance);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@mixin slide-in-right($duration: 0.3s, $distance: 20px) {
+  animation: slideInRight $duration ease-out both;
+  
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX($distance);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}
+
+// 加载动画
+@mixin loading-pulse {
+  animation: loadingPulse 1.5s ease-in-out infinite;
+  
+  @keyframes loadingPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
+@mixin loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-secondary) 25%,
+    var(--color-bg-hover) 50%,
+    var(--color-bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: loadingSkeleton 1.5s infinite;
+  
+  @keyframes loadingSkeleton {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+} 

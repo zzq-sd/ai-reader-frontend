@@ -1,0 +1,234 @@
+// 图标回退样式 - 当Font Awesome无法加载时的备用方案
+// 使用Unicode字符和CSS绘制简单图标
+
+.icon-fallback {
+  display: inline-block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  text-decoration: none;
+  text-align: center;
+  line-height: 1;
+  
+  // 确保图标有最小尺寸
+  min-width: 1em;
+  min-height: 1em;
+}
+
+// 基础图标映射（使用Unicode字符）
+.fa-home:not(:before) {
+  &::after {
+    content: '🏠';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-user:not(:before) {
+  &::after {
+    content: '👤';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-cog:not(:before) {
+  &::after {
+    content: '⚙️';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-brain:not(:before) {
+  &::after {
+    content: '🧠';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-newspaper:not(:before) {
+  &::after {
+    content: '📰';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-rss:not(:before) {
+  &::after {
+    content: '📡';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-bookmark:not(:before) {
+  &::after {
+    content: '🔖';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-sticky-note:not(:before) {
+  &::after {
+    content: '📝';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-search:not(:before) {
+  &::after {
+    content: '🔍';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-bell:not(:before) {
+  &::after {
+    content: '🔔';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-bars:not(:before) {
+  &::after {
+    content: '☰';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-plus:not(:before) {
+  &::after {
+    content: '+';
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: bold;
+  }
+}
+
+.fa-times:not(:before) {
+  &::after {
+    content: '×';
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: bold;
+  }
+}
+
+.fa-check:not(:before) {
+  &::after {
+    content: '✓';
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: bold;
+  }
+}
+
+.fa-arrow-left:not(:before) {
+  &::after {
+    content: '←';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-arrow-right:not(:before) {
+  &::after {
+    content: '→';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-chevron-right:not(:before) {
+  &::after {
+    content: '›';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-laptop-code:not(:before) {
+  &::after {
+    content: '💻';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-palette:not(:before) {
+  &::after {
+    content: '🎨';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-chart-pie:not(:before) {
+  &::after {
+    content: '📊';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-project-diagram:not(:before) {
+  &::after {
+    content: '🕸️';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-robot:not(:before) {
+  &::after {
+    content: '🤖';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-chart-line:not(:before) {
+  &::after {
+    content: '📈';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+.fa-question-circle:not(:before) {
+  &::after {
+    content: '❓';
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+// 当Font Awesome完全失效时的几何图形回退
+.fa:not([class*="fa-"]):not(:before) {
+  &::after {
+    content: '■';
+    font-family: system-ui, -apple-system, sans-serif;
+    color: var(--color-text-disabled, #999);
+  }
+}
+
+// 动画支持
+@keyframes fallback-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fa-spin:not(:before) {
+  animation: fallback-spin 2s linear infinite;
+}
+
+// 为特定尺寸优化emoji显示
+.icon-fallback {
+  &[style*="font-size: 12px"], &[style*="font-size:12px"] {
+    font-size: 12px !important;
+  }
+  
+  &[style*="font-size: 14px"], &[style*="font-size:14px"] {
+    font-size: 14px !important;
+  }
+  
+  &[style*="font-size: 16px"], &[style*="font-size:16px"] {
+    font-size: 16px !important;
+  }
+  
+  &[style*="font-size: 18px"], &[style*="font-size:18px"] {
+    font-size: 18px !important;
+  }
+  
+  &[style*="font-size: 20px"], &[style*="font-size:20px"] {
+    font-size: 20px !important;
+  }
+  
+  &[style*="font-size: 24px"], &[style*="font-size:24px"] {
+    font-size: 24px !important;
+  }
+} 
