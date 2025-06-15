@@ -1,5 +1,7 @@
 import { apiClient } from './base'
 
+// #region --- Type Definitions ---
+
 // 图谱节点数据结构 - 与后端DTO对应
 export interface GraphNode {
   id: string
@@ -88,379 +90,152 @@ export interface GraphQueryParams {
   limit?: number
 }
 
+// #endregion
+
+// #region --- API Functions ---
+
 /**
  * 获取知识图谱数据
  */
-export async function getGraphData(params: GraphQueryParams = {}): Promise<{ data: GraphData }> {
-  const queryParams = new URLSearchParams()
-  
-  if (params.nodeType && params.nodeType !== 'ALL') {
-    queryParams.append('nodeType', params.nodeType)
-  }
-  if (params.search) {
-    queryParams.append('search', params.search)
-  }
-  if (params.limit) {
-    queryParams.append('limit', params.limit.toString())
-  }
-
+export async function getGraphData(params: GraphQueryParams = {}): Promise<GraphData> {
   console.log('🔍 获取知识图谱数据，请求参数:', params);
-  
   try {
-    const response = await apiClient.get(`/api/v1/knowledge/graph-data?${queryParams.toString()}`)
-    console.log('📊 知识图谱API原始响应:', response);
-    
-    // 确保返回的数据符合预期结构
-    if (!response.data || !response.data.data) {
-      console.error('❌ API响应格式不正确:', response);
+    const response = await apiClient.get('knowledge-graph/graph-data', {
+      params: {
+        nodeType: params.nodeType || 'ALL',
+        search: params.search || '',
+        limit: params.limit || 150
+      }
+    });
+    console.log('📊 知识图谱API原始响应:', response.data);
+    if (!response.data) {
       throw new Error('API响应格式不正确');
     }
-    
-    const rawGraphData = response.data.data;
-    console.log('📈 原始图谱数据结构:', {
-      nodes: rawGraphData.nodes?.length || 0,
-      edges: rawGraphData.edges?.length || 0,
-      nodeStructure: rawGraphData.nodes?.[0],
-      edgeStructure: rawGraphData.edges?.[0]
-    });
-    
-    // 转换后端DTO为前端期望的格式
-    const convertedGraphData = convertBackendDataToFrontend(rawGraphData);
-    
-    console.log('🔄 转换后的图谱数据:', {
-      nodes: convertedGraphData.nodes.length,
-      links: convertedGraphData.links.length,
-      nodeExample: convertedGraphData.nodes[0],
-      linkExample: convertedGraphData.links[0]
-    });
-    
-    return { data: convertedGraphData }
+    return convertBackendDataToFrontend(response.data);
   } catch (error) {
     console.error('❌ 获取知识图谱数据失败:', error);
-    throw error;
+    return { nodes: [], links: [] }; // 返回空数据以防UI崩溃
   }
 }
 
 /**
- * 将后端DTO数据转换为前端期望的格式
+ * 获取相关文章
  */
-function convertBackendDataToFrontend(rawData: any): GraphData {
-  console.log('🔄 开始数据格式转换...');
-  
-  // 处理节点数据
-  const nodes: GraphNode[] = (rawData.nodes || []).map((node: any, index: number) => {
-    // 智能提取节点名称，尝试多个可能的字段
-    let nodeName = '';
-    
-    // 优先级顺序：label > name > title > id的有意义部分
-    if (node.label && node.label.trim()) {
-      nodeName = node.label.trim();
-    } else if (node.name && node.name.trim()) {
-      nodeName = node.name.trim();
-    } else if (node.title && node.title.trim()) {
-      nodeName = node.title.trim();
-    } else if (node.id && node.id.trim() && !node.id.startsWith('node-') && !node.id.includes('_')) {
-      nodeName = node.id.trim();
-    } else {
-      // 根据节点类型生成描述性名称
-      const nodeType = normalizeNodeType(node.type);
-      nodeName = `未命名${nodeType === 'CONCEPT' ? '概念' : nodeType === 'ARTICLE' ? '文章' : '笔记'}-${index}`;
-    }
-    
-    const convertedNode: GraphNode = {
-      id: node.id || `node-${index}`,
-      name: nodeName,
-      type: normalizeNodeType(node.type),
-      importance: node.importance || node.size || 0.5,
-      description: node.properties?.description || node.description || `${nodeName}的详细信息`,
-      properties: {
-        ...node.properties,
-        category: node.category,
-        color: node.color,
-        createdAt: node.properties?.createdAt || new Date().toISOString(),
-        // 保留原始字段用于调试
-        originalLabel: node.label,
-        originalName: node.name,
-        originalTitle: node.title
-      }
-    };
-    
-    console.log(`📝 节点转换: [原始] label="${node.label}", name="${node.name}", title="${node.title}" -> [转换后] "${convertedNode.name}" (${convertedNode.type})`);
-    return convertedNode;
-  });
-  
-  // 创建节点ID到节点对象的映射，用于后续链接使用
-  const nodeMap: Record<string, GraphNode> = {};
-  nodes.forEach(node => {
-    nodeMap[node.id] = node;
-  });
-  
-  // 处理边数据 - 转换edges为links
-  const links: GraphLink[] = [];
-  
-  // 确保有效的边数据
-  const edgesArray = rawData.edges || [];
-  console.log(`🔍 处理 ${edgesArray.length} 条边数据`);
-  console.log(`🔧 节点映射表包含 ${Object.keys(nodeMap).length} 个节点`);
-
-  if (edgesArray.length > 0) {
-    // 记录一条示例边数据，帮助调试
-    console.log(`🔍 边数据示例:`, edgesArray[0]);
-  }
-  
-  edgesArray.forEach((edge: any, index: number) => {
-    // 确保source和target字段存在
-    if (!edge.source || !edge.target) {
-      console.warn(`⚠️ 跳过无效边数据，缺少source或target: `, edge);
-      return;
-    }
-    
-    // 验证源节点标识符格式
-    const sourceId = typeof edge.source === 'string' ? edge.source : 
-                    typeof edge.source === 'object' && edge.source && edge.source.id ? edge.source.id : null;
-    
-    // 验证目标节点标识符格式
-    const targetId = typeof edge.target === 'string' ? edge.target : 
-                    typeof edge.target === 'object' && edge.target && edge.target.id ? edge.target.id : null;
-    
-    if (!sourceId || !targetId) {
-      console.warn(`⚠️ 边数据格式不正确，无法提取有效的源或目标ID: `, edge);
-      return;
-    }
-    
-    // 获取source和target对应的节点对象
-    const sourceNode = nodeMap[sourceId];
-    const targetNode = nodeMap[targetId];
-    
-    // 验证源节点和目标节点都存在
-    if (!sourceNode) {
-      console.warn(`⚠️ 边的源节点不存在 - ID: ${sourceId}`);
-      return;
-    }
-    
-    if (!targetNode) {
-      console.warn(`⚠️ 边的目标节点不存在 - ID: ${targetId}`);
-      return;
-    }
-    
-    // 创建连接，确保source和target使用对象引用而非字符串ID
-    const convertedLink: GraphLink = {
-      source: sourceNode,  // 使用节点对象而非字符串
-      target: targetNode,  // 使用节点对象而非字符串
-      type: normalizeRelationType(edge.type || edge.label),
-      strength: edge.weight || edge.strength || 1,
-      properties: {
-        ...edge.properties,
-        label: edge.label || '关联',
-        color: edge.color || '#999999',
-        // 保留原始属性以便调试
-        originalSource: sourceId,
-        originalTarget: targetId
-      }
-    };
-    
-    console.log(`🔗 边转换 #${index}: ${sourceNode.name} -> ${targetNode.name} (${convertedLink.type})`);
-    links.push(convertedLink);
-  });
-  
-  console.log(`✅ 数据转换完成: ${nodes.length} 个节点, ${links.length} 条连线`);
-  
-  // 最终验证：确保所有连线都使用对象引用
-  const objectReferenceValidation = links.every(link => 
-    typeof link.source === 'object' && typeof link.target === 'object'
-  );
-  
-  console.log(`🧪 连线对象引用验证: ${objectReferenceValidation ? '通过✅' : '失败❌'}`);
-  
-  if (!objectReferenceValidation) {
-    console.error('❌ 警告: 有连线仍在使用字符串引用，这将导致D3无法正确渲染连线!');
-    
-    // 打印出问题的连线
-    links.forEach((link, i) => {
-      if (typeof link.source !== 'object' || typeof link.target !== 'object') {
-        console.error(`❌ 连线 #${i} 使用字符串引用: `, link);
-      }
-    });
-  }
-  
-  return {
-    nodes,
-    links
-  };
-}
-
-/**
- * 规范化节点类型
- */
-function normalizeNodeType(type: string): 'CONCEPT' | 'ARTICLE' | 'NOTE' {
-  if (!type) return 'CONCEPT';
-  
-  const upperType = type.toUpperCase();
-  switch (upperType) {
-    case 'ARTICLE':
-    case 'ARTICLES':
-      return 'ARTICLE';
-    case 'NOTE':
-    case 'NOTES':
-      return 'NOTE';
-    case 'CONCEPT':
-    case 'CONCEPTS':
-    default:
-      return 'CONCEPT';
-  }
-}
-
-/**
- * 规范化关系类型
- */
-function normalizeRelationType(type: string): 'CONTAINS' | 'RELATED_TO' | 'DISCUSSES' {
-  if (!type) return 'RELATED_TO';
-  
-  const upperType = type.toUpperCase();
-  switch (upperType) {
-    case 'CONTAINS':
-    case 'CONTAIN':
-      return 'CONTAINS';
-    case 'DISCUSSES':
-    case 'DISCUSS':
-      return 'DISCUSSES';
-    case 'RELATED_TO':
-    case 'RELATED':
-    case 'RELATES_TO':
-    default:
-      return 'RELATED_TO';
-  }
-}
-
-/**
- * 验证图谱数据完整性并过滤无效连线
- */
-function validateGraphData(nodes: GraphNode[], links: GraphLink[]): void {
-  console.log('🔍 验证图谱数据完整性...');
-  
-  // 创建节点ID集合
-  const nodeIds = new Set(nodes.map(node => node.id));
-  
-  // 验证边的引用完整性并过滤出有效连线
-  const validLinks: GraphLink[] = [];
-  const invalidLinks: GraphLink[] = [];
-  
-  links.forEach(link => {
-    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    
-    const sourceExists = nodeIds.has(sourceId);
-    const targetExists = nodeIds.has(targetId);
-    
-    if (sourceExists && targetExists) {
-      validLinks.push(link);
-    } else {
-      console.info(`🔄 跳过无效连线引用: ${sourceId} -> ${targetId} {sourceExists: ${sourceExists}, targetExists: ${targetExists}}`);
-      invalidLinks.push(link);
-    }
-  });
-  
-  // 将无效连线从links数组中移除
-  links.length = 0;
-  links.push(...validLinks);
-  
-  if (invalidLinks.length > 0) {
-    console.info(`⚠️ 已过滤 ${invalidLinks.length} 条无效连线，剩余 ${validLinks.length} 条有效连线`);
-  }
-  
-  // 验证节点数据完整性
-  const invalidNodes = nodes.filter(node => !node.id || !node.name);
-  if (invalidNodes.length > 0) {
-    console.warn('⚠️ 发现无效节点:', invalidNodes);
-  }
-  
-  console.log('✅ 数据验证完成:', {
-    nodes: nodes.length,
-    links: links.length,
-    filteredInvalidLinks: invalidLinks.length,
-    invalidNodes: invalidNodes.length
-  });
-}
-
-/**
- * 获取概念相关的文章
- */
-export async function getRelatedArticles(conceptName: string, limit: number = 20): Promise<{ data: ArticleGraphDTO[] }> {
-  const response = await apiClient.get(`/api/v1/knowledge/concepts/${encodeURIComponent(conceptName)}/articles`, {
+export async function getRelatedArticles(conceptName: string, limit: number = 20): Promise<ArticleGraphDTO[]> {
+  const response = await apiClient.get(`knowledge-graph/concepts/${encodeURIComponent(conceptName)}/articles`, {
     params: { limit }
-  })
-  // 后端使用ApiResponse包装，需要从response.data.data获取实际数据
-  return { data: response.data.data }
+  });
+  return response.data?.data || [];
 }
 
 /**
  * 获取概念统计信息
  */
-export async function getConceptStatistics(conceptName: string): Promise<{ data: ConceptStatistics }> {
-  const response = await apiClient.get(`/api/v1/knowledge/concepts/${encodeURIComponent(conceptName)}/statistics`)
-  // 后端使用ApiResponse包装，需要从response.data.data获取实际数据
-  return { data: response.data.data }
+export async function getConceptStatistics(conceptName: string): Promise<ConceptStatistics | null> {
+  const response = await apiClient.get(`knowledge-graph/concepts/${encodeURIComponent(conceptName)}/statistics`);
+  return response.data?.data || null;
 }
 
 /**
  * 搜索概念
  */
-export async function searchConcepts(query: string, limit: number = 10): Promise<{ data: ConceptSearchResultDTO[] }> {
-  const response = await apiClient.get('/api/v1/knowledge/concepts/search', {
+export async function searchConcepts(query: string, limit: number = 10): Promise<ConceptSearchResultDTO[]> {
+  const response = await apiClient.get(`knowledge-graph/concepts/search`, {
     params: { query, limit }
-  })
-  // 后端使用ApiResponse包装，需要从response.data.data获取实际数据
-  return { data: response.data.data }
+  });
+  return response.data?.data || [];
 }
 
 /**
  * 获取概念详情
  */
-export async function getConceptDetail(conceptName: string): Promise<{ data: ConceptDetailDTO }> {
-  const response = await apiClient.get(`/api/v1/knowledge/concepts/${encodeURIComponent(conceptName)}`)
-  // 后端使用ApiResponse包装，需要从response.data.data获取实际数据
-  return { data: response.data.data }
+export async function getConceptDetail(conceptName: string): Promise<ConceptDetailDTO | null> {
+  const response = await apiClient.get(`knowledge-graph/concepts/${encodeURIComponent(conceptName)}`);
+  return response.data?.data || null;
 }
 
 /**
  * 手动触发文章重新分析
  */
-export async function reanalyzeArticle(articleId: string): Promise<{ data: string }> {
-  const response = await apiClient.post(`/api/v1/knowledge/articles/${articleId}/reanalyze`)
-  // 后端使用ApiResponse包装，需要从response.data.data获取实际数据
-  return { data: response.data.data }
+export async function reanalyzeArticle(articleId: string): Promise<string> {
+  const response = await apiClient.post(`knowledge-graph/articles/${articleId}/reanalyze`);
+  return response.data?.data || '分析任务已提交';
 }
 
 /**
  * 手动触发笔记重新分析
  */
-export async function reanalyzeNote(noteId: string): Promise<{ data: string }> {
-  try {
-    console.log(`准备分析笔记: ${noteId}`)
-    const response = await apiClient.post(`/api/v1/notes/${noteId}/reanalyze`)
-    console.log('笔记分析API响应:', response)
-    
-    // 即使后端返回了错误状态码也视为成功提交
-    // 由于后端已经开始处理分析任务，我们认为请求本身是成功的
-    // 处理直接返回字符串的情况
-    if (typeof response.data === 'string') {
-      return { data: response.data }
-    }
-    
-    // 处理ApiResponse包装的情况
-    if (response.data && response.data.data !== undefined) {
-      return { data: response.data.data }
-    }
-    
-    // 其他情况，返回默认消息
-    return { data: '分析任务已提交' }
-  } catch (error: any) {
-    // 捕获错误但返回成功响应，因为后端已经开始处理
-    console.error('笔记分析API调用异常:', error)
-    // 返回一个成功的响应，而不是抛出异常
-    return { data: '分析任务已提交，正在后台处理' }
-  }
+export async function reanalyzeNote(noteId: string): Promise<string> {
+  const response = await apiClient.post(`knowledge-graph/notes/${noteId}/reanalyze`);
+  return response.data?.data || '分析任务已提交';
 }
 
-// 导出类型别名
-export type NodeDetails = ConceptDetailDTO 
+// #endregion
+
+// #region --- Data Conversion Logic ---
+
+/**
+ * 将后端DTO数据转换为前端期望的D3格式
+ */
+function convertBackendDataToFrontend(apiResponse: any): GraphData {
+  const rawData = apiResponse.data; // 从ApiResponse中提取核心数据
+  if (!rawData || !Array.isArray(rawData.nodes)) {
+    console.warn('⚠️ 传入的原始数据格式不正确或节点为空，返回空图。', apiResponse);
+    return { nodes: [], links: [] };
+  }
+
+  const nodes: GraphNode[] = (rawData.nodes || []).map((node: any, index: number) => ({
+    id: node.id || `node-${index}`,
+    name: node.label || node.name || node.title || `未命名节点${index}`,
+    type: normalizeNodeType(node.type),
+    importance: node.importance || node.size || 0.5,
+    description: node.properties?.description || node.description || '无详细信息',
+    properties: node.properties || {}
+  }));
+
+  const nodeMap: Record<string, GraphNode> = {};
+  nodes.forEach(node => {
+    nodeMap[node.id] = node;
+  });
+
+  const links: GraphLink[] = [];
+  const edgesArray = rawData.edges || [];
+
+  edgesArray.forEach((edge: any) => {
+    const sourceId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+    const targetId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+
+    if (nodeMap[sourceId] && nodeMap[targetId]) {
+      links.push({
+        source: nodeMap[sourceId],
+        target: nodeMap[targetId],
+        type: normalizeRelationType(edge.type || edge.label),
+        strength: edge.weight || edge.strength || 1,
+        properties: edge.properties || {}
+      });
+    } else {
+      console.warn(`⚠️ 边引用了不存在的节点，已跳过: ${sourceId} -> ${targetId}`);
+    }
+  });
+
+  console.log(`✅ 数据转换完成: ${nodes.length} 个节点, ${links.length} 条连线`);
+  return { nodes, links };
+}
+
+function normalizeNodeType(type: string): 'CONCEPT' | 'ARTICLE' | 'NOTE' {
+  const upperType = (type || '').toUpperCase();
+  if (upperType.includes('CONCEPT')) return 'CONCEPT';
+  if (upperType.includes('ARTICLE')) return 'ARTICLE';
+  if (upperType.includes('NOTE')) return 'NOTE';
+  return 'CONCEPT'; // 默认
+}
+
+function normalizeRelationType(type: string): 'CONTAINS' | 'RELATED_TO' | 'DISCUSSES' {
+  const upperType = (type || '').toUpperCase();
+  if (upperType.includes('CONTAINS')) return 'CONTAINS';
+  if (upperType.includes('RELATED_TO')) return 'RELATED_TO';
+  if (upperType.includes('DISCUSSES')) return 'DISCUSSES';
+  return 'RELATED_TO'; // 默认
+}
+
+// #endregion 
